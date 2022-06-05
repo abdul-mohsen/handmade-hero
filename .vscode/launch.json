@@ -1,0 +1,18 @@
+{
+    // "version": "0.2.0",
+    // "configurations": [
+    //   {
+    //     "name": "C++ Launch",
+    //     "type": "cppdbg",
+    //     "request": "launch",
+    //     "program": "${workspaceFolder}\\build\\${fileBasenameNoExtension}.exe",
+    //     "args": [],
+    //     "stopAtEntry": false,
+    //     "cwd": "${workspaceFolder}",
+    //     "environment": [{ "name": "config", "value": "Debug" }],
+    //     "externalConsole": true, //set to true to see output in cmd instead
+    //     "miDebuggerPath": "cl.exe"
+    //   }
+    // ]
+  
+}
