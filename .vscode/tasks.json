@@ -12,7 +12,8 @@
 				"/Fe:",
 				"${workspaceFolder}\\src\\${fileBasenameNoExtension}.exe",
 				"${workspaceFolder}\\src\\*.cpp",
-				"user32.lib"
+				"user32.lib",
+				"gdi32.lib"
 			],
 			"options": {
 				"cwd": "${workspaceFolder}\\build"

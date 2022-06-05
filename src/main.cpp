@@ -19,7 +19,18 @@ LRESULT CALLBACK windowCallBack(
         } break;
         case WM_ACTIVATEAPP: {
 
-        }
+        } break;
+
+        case WM_PAINT: {
+            PAINTSTRUCT paint;
+            HDC deviceContext = BeginPaint(window, &paint);
+            int x = paint.rcPaint.left;
+            int y = paint.rcPaint.top;
+            int height = paint.rcPaint.bottom -  paint.rcPaint.top;
+            int width = paint.rcPaint.right - paint.rcPaint.left;
+            PatBlt(deviceContext, x, y, width, height, WHITENESS);
+            EndPaint(window, &paint);
+        } break;
 
         default: {
             result = DefWindowProcA(window, message, wParam, lParam);
