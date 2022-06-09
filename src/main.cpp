@@ -1,46 +1,73 @@
 #include <Windows.h>
+#include <stdint.h>
 
 #define Internal static
 #define Local static
 #define Global static
 
+typedef  uint8_t uint8;
+typedef  uint16_t uint16;
+typedef  uint32_t uint32;
+typedef  uint64_t uint64;
+
+typedef  int8_t nint8;
+typedef  int16_t int16;
+typedef  int32_t int32;
+typedef  int64_t int64;
+
 Global bool running;
 Global BITMAPINFO bitmapInfo;
 Global void *bitmapMemory;
-Global HBITMAP bitmapHandle;
-Global HDC bitmapDeviceContext;
+Global int bytesPerPixel = 4;
 
 Internal void resize(int width, int height) {
-    // TODO @ssda free momery
 
-    if (bitmapHandle) {
-        DeleteObject(bitmapHandle);
-    }
-    if (!bitmapDeviceContext) {
-        bitmapDeviceContext = CreateCompatibleDC(0);
+    if (bitmapMemory) {
+        VirtualFree(bitmapMemory, 0, MEM_RELEASE);
     }
 
     bitmapInfo.bmiHeader.biSize = sizeof(bitmapInfo.bmiHeader);
     bitmapInfo.bmiHeader.biWidth = width;
-    bitmapInfo.bmiHeader.biHeight = height;
+    bitmapInfo.bmiHeader.biHeight = -height;
     bitmapInfo.bmiHeader.biPlanes = 1;
     bitmapInfo.bmiHeader.biBitCount = 32;
     bitmapInfo.bmiHeader.biCompression = BI_RGB;
 
-    bitmapHandle =  CreateDIBSection(
-        bitmapDeviceContext, &bitmapInfo,
-        DIB_RGB_COLORS,
-        &bitmapMemory,
-        0, 0
-    );
+    
+    int bitmapMemorySize = (width * height) * bytesPerPixel;
+    bitmapMemory = VirtualAlloc(0, bitmapMemorySize, MEM_COMMIT, PAGE_READWRITE);
+
+    int pitch = width*bytesPerPixel;
+    uint8 *row = (uint8 *) bitmapMemory;
+    for(int y = 0; y < height; y++) {
+        uint8 *pixel = (uint8 *)row;
+        for(int x = 0; x < width; x++) {
+            *pixel = (uint8) x;
+            ++pixel;
+
+            *pixel = (uint8) y;
+            ++pixel;
+
+            *pixel = 255;
+            ++pixel;
+            
+            *pixel = 0;
+            ++pixel;
+        }
+        row += pitch;
+    }
 }
 
-Internal void updateWindow(HDC deviceContext, int x, int y, int width, int hieght) {
+Internal void updateWindow(HDC deviceContext,RECT *windowRect) {
+    int width = bitmapInfo.bmiHeader.biWidth;
+    int height = -bitmapInfo.bmiHeader.biHeight;
+    int windowWidth = windowRect->right - windowRect->left;
+    int windowHeight = windowRect->bottom - windowRect->top;
 
     StretchDIBits(
         deviceContext,
-        x, y, width, hieght,
-        x, y, width, hieght,
+        0, 0, width, height,
+        0, 0, windowWidth, windowHeight,
         bitmapMemory,
         &bitmapInfo,
         DIB_RGB_COLORS, SRCCOPY
@@ -75,11 +102,9 @@ LRESULT CALLBACK windowCallBack(
         case WM_PAINT: {
             PAINTSTRUCT paint;
             HDC deviceContext = BeginPaint(window, &paint);
-            int x = paint.rcPaint.left;
-            int y = paint.rcPaint.top;
-            int height = paint.rcPaint.bottom -  paint.rcPaint.top;
-            int width = paint.rcPaint.right - paint.rcPaint.left;
-            PatBlt(deviceContext, x, y, width, height, WHITENESS);
+            RECT clientRect;
+            GetClientRect(window, &clientRect);
+            updateWindow(deviceContext, &clientRect);
             EndPaint(window, &paint);
         } break;
 
