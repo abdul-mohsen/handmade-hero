@@ -1,5 +1,52 @@
 #include <Windows.h>
 
+#define Internal static
+#define Local static
+#define Global static
+
+Global bool running;
+Global BITMAPINFO bitmapInfo;
+Global void *bitmapMemory;
+Global HBITMAP bitmapHandle;
+Global HDC bitmapDeviceContext;
+
+Internal void resize(int width, int height) {
+    // TODO @ssda free momery
+
+    if (bitmapHandle) {
+        DeleteObject(bitmapHandle);
+    }
+    if (!bitmapDeviceContext) {
+        bitmapDeviceContext = CreateCompatibleDC(0);
+    }
+
+    bitmapInfo.bmiHeader.biSize = sizeof(bitmapInfo.bmiHeader);
+    bitmapInfo.bmiHeader.biWidth = width;
+    bitmapInfo.bmiHeader.biHeight = height;
+    bitmapInfo.bmiHeader.biPlanes = 1;
+    bitmapInfo.bmiHeader.biBitCount = 32;
+    bitmapInfo.bmiHeader.biCompression = BI_RGB;
+
+    bitmapHandle =  CreateDIBSection(
+        bitmapDeviceContext, &bitmapInfo,
+        DIB_RGB_COLORS,
+        &bitmapMemory,
+        0, 0
+    );
+}
+
+Internal void updateWindow(HDC deviceContext, int x, int y, int width, int hieght) {
+
+    StretchDIBits(
+        deviceContext,
+        x, y, width, hieght,
+        x, y, width, hieght,
+        bitmapMemory,
+        &bitmapInfo,
+        DIB_RGB_COLORS, SRCCOPY
+    );
+}
+
 LRESULT CALLBACK windowCallBack(
     HWND window,
     UINT message,
@@ -9,13 +56,17 @@ LRESULT CALLBACK windowCallBack(
     LRESULT result = 0;
     switch (message) {
         case WM_SIZE: {
-
+            RECT clientRect;
+            GetClientRect(window, &clientRect);
+            int height = clientRect.bottom -  clientRect.top;
+            int width = clientRect.right - clientRect.left;
+            resize(width, height);
         } break;
         case WM_DESTROY: {
-
+            running = false;
         } break;
         case WM_CLOSE: {
-
+            running = false;
         } break;
         case WM_ACTIVATEAPP: {
 
@@ -70,7 +121,8 @@ WinMain(
         );
         if(windowHandle) {
             MSG message;
-            for(;;) {
+            running = true;
+            while(running) {
                 BOOL messageResult = GetMessageA(&message, 0, 0, 0);
                 if(messageResult > 0) {
                     TranslateMessage(&message);
