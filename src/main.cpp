@@ -20,6 +20,31 @@ Global BITMAPINFO bitmapInfo;
 Global void *bitmapMemory;
 Global int bytesPerPixel = 4;
 
+Internal void render(int xOffset, int yOffset) {
+    int width = bitmapInfo.bmiHeader.biWidth;
+    int height = -bitmapInfo.bmiHeader.biHeight;
+
+    int pitch = width*bytesPerPixel;
+    uint8 *row = (uint8 *) bitmapMemory;
+    for(int y = 0; y < height; y++) {
+        uint8 *pixel = (uint8 *)row;
+        for(int x = 0; x < width; x++) {
+            *pixel = (uint8) x + xOffset;
+            ++pixel;
+
+            *pixel = (uint8) y + yOffset;
+            ++pixel;
+
+            *pixel = 255;
+            ++pixel;
+            
+            *pixel = 0;
+            ++pixel;
+        }
+        row += pitch;
+    }
+}
+
 Internal void resize(int width, int height) {
 
     if (bitmapMemory) {
@@ -33,29 +58,9 @@ Internal void resize(int width, int height) {
     bitmapInfo.bmiHeader.biBitCount = 32;
     bitmapInfo.bmiHeader.biCompression = BI_RGB;
 
-    
     int bitmapMemorySize = (width * height) * bytesPerPixel;
     bitmapMemory = VirtualAlloc(0, bitmapMemorySize, MEM_COMMIT, PAGE_READWRITE);
-
-    int pitch = width*bytesPerPixel;
-    uint8 *row = (uint8 *) bitmapMemory;
-    for(int y = 0; y < height; y++) {
-        uint8 *pixel = (uint8 *)row;
-        for(int x = 0; x < width; x++) {
-            *pixel = (uint8) x;
-            ++pixel;
-
-            *pixel = (uint8) y;
-            ++pixel;
-
-            *pixel = 255;
-            ++pixel;
-            
-            *pixel = 0;
-            ++pixel;
-        }
-        row += pitch;
-    }
+    render(128,0);
 }
 
 Internal void updateWindow(HDC deviceContext,RECT *windowRect) {
@@ -147,14 +152,22 @@ WinMain(
         if(windowHandle) {
             MSG message;
             running = true;
+            int xOffset = 0;
+            int yOffset = 0;
             while(running) {
-                BOOL messageResult = GetMessageA(&message, 0, 0, 0);
-                if(messageResult > 0) {
+                while(PeekMessage(&message, 0, 0, 0, PM_REMOVE)) {
+                    if (message.message == WM_QUIT) {
+                        running = false;
+                    }
                     TranslateMessage(&message);
                     DispatchMessageA(&message);
-                } else {
-                    break;
                 }
+                render(xOffset, yOffset);
+                RECT clientRect;
+                GetClientRect(windowHandle, &clientRect);
+                HDC deviceContext = GetDC(windowHandle);
+                updateWindow(deviceContext, &clientRect);
+                xOffset++;
             }
         } else {
 
