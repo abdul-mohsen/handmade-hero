@@ -16,65 +16,85 @@ typedef  int32_t int32;
 typedef  int64_t int64;
 
 Global bool running;
-Global BITMAPINFO bitmapInfo;
-Global void *bitmapMemory;
-Global int bytesPerPixel = 4;
 
-Internal void render(int xOffset, int yOffset) {
-    int width = bitmapInfo.bmiHeader.biWidth;
-    int height = -bitmapInfo.bmiHeader.biHeight;
+struct Diminsion {
+    int width;
+    int height;
+};
 
-    int pitch = width*bytesPerPixel;
-    uint8 *row = (uint8 *) bitmapMemory;
+struct ScreenBuffer {
+    BITMAPINFO info;
+    void *memory;
+    int pitch;
+    int bytesPerPixel;
+};
+
+Global ScreenBuffer globalBuffer;
+
+Internal Diminsion getDiminsion(HWND window) {
+    RECT clientRect;
+    GetClientRect(window, &clientRect);
+    Diminsion diminsion;
+    diminsion.width = clientRect.right - clientRect.left;
+    diminsion.height =  clientRect.bottom - clientRect.top;
+    return diminsion;
+
+}
+
+Internal void render(ScreenBuffer buffer, int xOffset, int yOffset) {
+    int width = buffer.info.bmiHeader.biWidth;
+    int height = -buffer.info.bmiHeader.biHeight;
+
+    uint8 *row = (uint8 *) buffer.memory;
     for(int y = 0; y < height; y++) {
-        uint8 *pixel = (uint8 *)row;
+        uint32 *pixel = (uint32 *)row;
         for(int x = 0; x < width; x++) {
-            *pixel = (uint8) x + xOffset;
-            ++pixel;
-
-            *pixel = (uint8) y + yOffset;
-            ++pixel;
-
-            *pixel = 255;
-            ++pixel;
-            
-            *pixel = 0;
-            ++pixel;
+            uint8 blue = (x) % (y + 1);
+            uint8 green = x + xOffset;
+            uint8 red = y + yOffset;
+            *pixel++ = (red << 16) | (green << 8) | blue;
         }
-        row += pitch;
+        row += buffer.pitch;
     }
 }
 
-Internal void resize(int width, int height) {
+Internal void resize(ScreenBuffer *buffer) {
 
-    if (bitmapMemory) {
-        VirtualFree(bitmapMemory, 0, MEM_RELEASE);
+    if (buffer->memory) {
+        VirtualFree(buffer->memory, 0, MEM_RELEASE);
     }
 
-    bitmapInfo.bmiHeader.biSize = sizeof(bitmapInfo.bmiHeader);
-    bitmapInfo.bmiHeader.biWidth = width;
-    bitmapInfo.bmiHeader.biHeight = -height;
-    bitmapInfo.bmiHeader.biPlanes = 1;
-    bitmapInfo.bmiHeader.biBitCount = 32;
-    bitmapInfo.bmiHeader.biCompression = BI_RGB;
+    int width = buffer->info.bmiHeader.biWidth;
+    int height= -buffer->info.bmiHeader.biHeight;
+    int bytesPerPixel = buffer->bytesPerPixel;
+
+    buffer->info.bmiHeader.biSize = sizeof(buffer->info.bmiHeader);
+    buffer->info.bmiHeader.biPlanes = 1;
+    buffer->info.bmiHeader.biBitCount = 32;
+    buffer->info.bmiHeader.biCompression = BI_RGB;
 
     int bitmapMemorySize = (width * height) * bytesPerPixel;
-    bitmapMemory = VirtualAlloc(0, bitmapMemorySize, MEM_COMMIT, PAGE_READWRITE);
-    render(128,0);
+    buffer->memory = VirtualAlloc(0, bitmapMemorySize, MEM_COMMIT, PAGE_READWRITE);
+    buffer->pitch = width*bytesPerPixel;
+
+    render(*buffer, 128, 0);
 }
 
-Internal void updateWindow(HDC deviceContext,RECT *windowRect) {
-    int width = bitmapInfo.bmiHeader.biWidth;
-    int height = -bitmapInfo.bmiHeader.biHeight;
-    int windowWidth = windowRect->right - windowRect->left;
-    int windowHeight = windowRect->bottom - windowRect->top;
+Internal void display(
+    HDC deviceContext,
+    Diminsion diminsion,
+    ScreenBuffer buffer) {
+    int width = buffer.info.bmiHeader.biWidth;
+    int height = -buffer.info.bmiHeader.biHeight;
+    int windowWidth = diminsion.width;
+    int windowHeight = diminsion.height;
 
     StretchDIBits(
         deviceContext,
-        0, 0, width, height,
         0, 0, windowWidth, windowHeight,
-        bitmapMemory,
-        &bitmapInfo,
+        0, 0, width, height,
+        buffer.memory,
+        &buffer.info,
         DIB_RGB_COLORS, SRCCOPY
     );
 }
@@ -88,11 +108,6 @@ LRESULT CALLBACK windowCallBack(
     LRESULT result = 0;
     switch (message) {
         case WM_SIZE: {
-            RECT clientRect;
-            GetClientRect(window, &clientRect);
-            int height = clientRect.bottom -  clientRect.top;
-            int width = clientRect.right - clientRect.left;
-            resize(width, height);
         } break;
         case WM_DESTROY: {
             running = false;
@@ -107,9 +122,7 @@ LRESULT CALLBACK windowCallBack(
         case WM_PAINT: {
             PAINTSTRUCT paint;
             HDC deviceContext = BeginPaint(window, &paint);
-            RECT clientRect;
-            GetClientRect(window, &clientRect);
-            updateWindow(deviceContext, &clientRect);
+            display(deviceContext, getDiminsion(window), globalBuffer);
             EndPaint(window, &paint);
         } break;
 
@@ -129,10 +142,14 @@ WinMain(
     int showCode
 ) {
     WNDCLASSA window = {};
-    window.style = CS_OWNDC|CS_HREDRAW|CS_VREDRAW;
+    window.style = CS_HREDRAW|CS_VREDRAW;
     window.lpfnWndProc = windowCallBack;
     window.hInstance = instance;
     window.lpszClassName = "ssda";
+    globalBuffer.bytesPerPixel = 4;
+    globalBuffer.info.bmiHeader.biWidth = 1280;
+    globalBuffer.info.bmiHeader.biHeight = -720;
+    resize(&globalBuffer);
 
     if (RegisterClassA(&window)) {
         HWND windowHandle = CreateWindowExA(
@@ -162,12 +179,14 @@ WinMain(
                     TranslateMessage(&message);
                     DispatchMessageA(&message);
                 }
-                render(xOffset, yOffset);
-                RECT clientRect;
-                GetClientRect(windowHandle, &clientRect);
+
+                render(globalBuffer, xOffset, yOffset);
                 HDC deviceContext = GetDC(windowHandle);
-                updateWindow(deviceContext, &clientRect);
+                display(deviceContext, getDiminsion(windowHandle), globalBuffer);
+                ReleaseDC(windowHandle, deviceContext);
                 xOffset++;
+                yOffset += 2;
+                
             }
         } else {
 
