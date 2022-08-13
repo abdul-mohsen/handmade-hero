@@ -1,5 +1,6 @@
 #include <Windows.h>
 #include <stdint.h>
+#include <xinput.h>
 
 #define Internal static
 #define Local static
@@ -14,6 +15,7 @@ typedef  int8_t nint8;
 typedef  int16_t int16;
 typedef  int32_t int32;
 typedef  int64_t int64;
+typedef int32 bool32;
 
 Global bool running;
 
@@ -38,7 +40,37 @@ Internal Diminsion getDiminsion(HWND window) {
     diminsion.width = clientRect.right - clientRect.left;
     diminsion.height =  clientRect.bottom - clientRect.top;
     return diminsion;
+}
 
+#define X_INPUT_GET_STATE(name) DWORD WINAPI name(DWORD dwUserIndex, XINPUT_STATE *pState)
+#define X_INPUT_SET_STATE(name) DWORD WINAPI name(DWORD dwUserIndex, XINPUT_VIBRATION *pState)
+typedef X_INPUT_GET_STATE(x_inpute_get_state);
+typedef X_INPUT_SET_STATE(x_inpute_set_state);
+
+X_INPUT_GET_STATE(XInputGetSatetStub) {
+    return ERROR_DEVICE_NOT_CONNECTED;
+}
+
+X_INPUT_SET_STATE(xInputSetStateStub) {
+    return ERROR_DEVICE_NOT_CONNECTED;
+}
+
+Global x_inpute_get_state *xInputGetState_ = XInputGetSatetStub;
+Global x_inpute_set_state *xInputeSetState_= xInputSetStateStub;
+
+#define XInputGetState xInputGetState_
+#define XInputSetState xInputeSetState_
+
+Internal void loadXInput(void) {
+    HMODULE xInputLibrary = LoadLibraryA("xinput1_4.dll");
+    if(!xInputLibrary) {
+        HMODULE xInputLibrary = LoadLibraryA("xinput1_3.dll");
+    }
+    if (xInputLibrary) {
+        XInputGetState = (x_inpute_get_state *) GetProcAddress(xInputLibrary, "XInputGetState");
+        XInputSetState = (x_inpute_set_state *) GetProcAddress(xInputLibrary, "XInputSetState");
+
+    }
 }
 
 Internal void render(ScreenBuffer buffer, int xOffset, int yOffset) {
@@ -125,6 +157,33 @@ LRESULT CALLBACK windowCallBack(
             display(deviceContext, getDiminsion(window), globalBuffer);
             EndPaint(window, &paint);
         } break;
+        case WM_SYSKEYDOWN:
+        case WM_SYSKEYUP:
+        case WM_KEYDOWN:
+        case WM_KEYUP: {
+            uint32 vkCode = wParam;
+            bool wasDown = ((lParam & (1 << 30)) != 0);
+            bool isDown = ((lParam & (1 << 31)) == 0);
+            switch (vkCode) {
+                case 'Q':
+                case 'W':
+                case 'E':
+                case 'A':
+                case 'S':
+                case 'd':
+                case VK_DOWN:
+                case VK_UP:
+                case VK_LEFT:
+                case VK_RIGHT:
+                case VK_SPACE:
+                case VK_ESCAPE:
+                case VK_F4: {
+                    if (lParam & (1 << 29)) {
+                        running = false;
+                    }
+                } break;
+            }
+        } break;
 
         default: {
             result = DefWindowProcA(window, message, wParam, lParam);
@@ -141,6 +200,7 @@ WinMain(
     LPSTR commandLine,
     int showCode
 ) {
+    loadXInput();
     WNDCLASSA window = {};
     window.style = CS_HREDRAW|CS_VREDRAW;
     window.lpfnWndProc = windowCallBack;
@@ -180,6 +240,29 @@ WinMain(
                     DispatchMessageA(&message);
                 }
 
+                for (DWORD i = 0; i < XUSER_MAX_COUNT; ++i) {
+                    XINPUT_STATE controllerState;
+                    if (XInputGetState(i, &controllerState) == ERROR_SUCCESS) {
+                        XINPUT_GAMEPAD *pad = &controllerState.Gamepad;
+                        bool up = pad->wButtons & XINPUT_GAMEPAD_DPAD_UP;
+                        bool down = pad->wButtons & XINPUT_GAMEPAD_DPAD_DOWN;
+                        bool left = pad->wButtons & XINPUT_GAMEPAD_DPAD_LEFT;
+                        bool right = pad->wButtons & XINPUT_GAMEPAD_DPAD_RIGHT;
+                        bool start = pad->wButtons & XINPUT_GAMEPAD_START;
+                        bool back = pad->wButtons & XINPUT_GAMEPAD_BACK;
+                        bool leftShoulder = pad->wButtons & XINPUT_GAMEPAD_LEFT_SHOULDER;
+                        bool rightShoulder = pad->wButtons & XINPUT_GAMEPAD_RIGHT_SHOULDER;
+                        bool aButton = pad->wButtons & XINPUT_GAMEPAD_A;
+                        bool bButton = pad->wButtons & XINPUT_GAMEPAD_B;
+                        bool xButton = pad->wButtons & XINPUT_GAMEPAD_X;
+                        bool yButton = pad->wButtons & XINPUT_GAMEPAD_Y;
+                        int16 stickX = pad->sThumbLX;
+                        int16 stickY = pad->sThumbLY;
+
+                    } else {
+                        // Todo
+                    }
+                }
                 render(globalBuffer, xOffset, yOffset);
                 HDC deviceContext = GetDC(windowHandle);
                 display(deviceContext, getDiminsion(windowHandle), globalBuffer);
